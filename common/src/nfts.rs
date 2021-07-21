@@ -9,7 +9,7 @@ pub trait NFTs {
     type AccountId;
 
     // How details related to an NFT are represented.
-    type NFTDetails: Default;
+    type NFTDetails: Default + Clone;
 
     /// How NFTs are represented internally.
     type NFTId: Parameter + Copy;
