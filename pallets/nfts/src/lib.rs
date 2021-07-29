@@ -64,6 +64,45 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        #[pallet::weight(T::WeightInfo::create())]
+        pub fn force_create_nft(
+            origin: OriginFor<T>,
+            id: T::NFTId,
+            data: NFTData<T::AccountId>,
+        ) -> DispatchResultWithPostInfo {
+            ensure_root(origin)?;
+
+            let series_id = data.details.series_id;
+            let owner = data.owner.clone();
+            Data::<T>::insert(id, data);
+            Self::deposit_event(Event::Created(id, owner, series_id));
+
+            Ok(().into())
+        }
+
+        #[pallet::weight(T::WeightInfo::create())]
+        pub fn force_create_series(
+            origin: OriginFor<T>,
+            id: NFTSeriesId,
+            data: NFTSeriesDetails<T::AccountId, T::NFTId>,
+        ) -> DispatchResultWithPostInfo {
+            ensure_root(origin)?;
+
+            Series::<T>::insert(id, data);
+            Ok(().into())
+        }
+
+        #[pallet::weight(T::WeightInfo::create())]
+        pub fn force_set_nft_total(
+            origin: OriginFor<T>,
+            value: T::NFTId,
+        ) -> DispatchResultWithPostInfo {
+            ensure_root(origin)?;
+
+            Total::<T>::set(value);
+            Ok(().into())
+        }
+
         /// Create a new NFT with the provided details. An ID will be auto
         /// generated and logged as an event, The caller of this function
         /// will become the owner of the new NFT.

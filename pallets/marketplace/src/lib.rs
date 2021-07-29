@@ -27,6 +27,7 @@ pub mod pallet {
     use frame_support::traits::Currency;
     use frame_support::traits::ExistenceRequirement;
     use frame_system::pallet_prelude::*;
+    use sp_runtime::traits::StaticLookup;
     use ternoa_common::traits::{LockableNFTs, NFTs};
 
     pub type NFTIdOf<T> = <<T as Config>::NFTs as LockableNFTs>::NFTId;
@@ -64,6 +65,23 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        #[pallet::weight(T::WeightInfo::list())]
+        pub fn force_list(
+            origin: OriginFor<T>,
+            nft_id: NFTIdOf<T>,
+            owner: <T::Lookup as StaticLookup>::Source,
+            price: NFTCurrency<T>,
+        ) -> DispatchResultWithPostInfo {
+            ensure_root(origin)?;
+
+            let who = T::Lookup::lookup(owner)?;
+
+            NFTsForSale::<T>::insert(nft_id, (who.clone(), price.clone()));
+            Self::deposit_event(Event::NftListed(nft_id, price));
+
+            Ok(().into())
+        }
+
         /// Deposit a nft and list it on the marketplace
         #[pallet::weight(T::WeightInfo::list())]
         pub fn list(
