@@ -4,12 +4,17 @@
 mod benchmarking;
 mod types;
 
+use codec::{Decode, Encode, HasCompact};
+use frame_support::sp_tracing;
 pub use pallet::*;
 pub use types::*;
 
+use frame_support::debug;
 use frame_support::traits::{Currency, Get, LockableCurrency, WithdrawReasons};
 use sp_runtime::traits::Zero;
+use sp_runtime::RuntimeDebug;
 use sp_std::collections::btree_map::BTreeMap;
+use sp_std::vec;
 use sp_std::vec::Vec;
 
 type BalanceOf<T> =
@@ -31,6 +36,8 @@ pub mod pallet {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// TODO!
         type Currency: LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>;
+        /// TODO!
+        type CharityDest: Get<Self::AccountId>;
         /// TODO!
         #[pallet::constant]
         type MinimumStake: Get<BalanceOf<Self>>;
@@ -100,7 +107,6 @@ pub mod pallet {
             origin: OriginFor<T>,
             controller: <T::Lookup as StaticLookup>::Source,
             amount: BalanceOf<T>,
-            reward_destination: RewardDestination<T::AccountId>,
         ) -> DispatchResultWithPostInfo {
             let stash = ensure_signed(origin)?;
 
@@ -117,7 +123,7 @@ pub mod pallet {
             }
 
             let controller = T::Lookup::lookup(controller)?;
-            Bonded::<T>::insert(&stash, (&controller, reward_destination));
+            Bonded::<T>::insert(&stash, &controller);
 
             let ledger = StashLedger::new(stash, amount, amount, Zero::zero());
             Self::update_ledger(&controller, &ledger);
@@ -134,7 +140,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let stash = ensure_signed(origin)?;
 
-            let controller = Bonded::<T>::get(&stash).ok_or(Error::<T>::NotStash)?.0;
+            let controller = Bonded::<T>::get(&stash).ok_or(Error::<T>::NotStash)?;
             let mut ledger = Ledger::<T>::get(&controller).ok_or(Error::<T>::NotController)?;
 
             let stash_balance = T::Currency::free_balance(&stash);
@@ -190,9 +196,7 @@ pub mod pallet {
             let delegator_stash = T::Lookup::lookup(delegator)?;
 
             // Making sure that the delegator exists
-            let controller = Bonded::<T>::get(&delegator_stash)
-                .ok_or(Error::<T>::NotStash)?
-                .0;
+            let controller = Bonded::<T>::get(&delegator_stash).ok_or(Error::<T>::NotStash)?;
             ensure!(
                 Ledger::<T>::contains_key(&controller),
                 Error::<T>::NotController
@@ -203,16 +207,14 @@ pub mod pallet {
                 return Err(Error::<T>::InsufficientFunds.into());
             }
 
-            let controller = Bonded::<T>::get(&caller_stash)
-                .ok_or(Error::<T>::NotStash)?
-                .0;
+            let controller = Bonded::<T>::get(&caller_stash).ok_or(Error::<T>::NotStash)?;
             let mut ledger = Ledger::<T>::get(&controller).ok_or(Error::<T>::NotController)?;
 
             ledger.total += amount;
             ledger.delegated += amount;
 
             Self::update_ledger(&controller, &ledger);
-            Delegated::<T>::mutate(&controller, |x| {
+            Delegated::<T>::mutate(&caller_stash, |x| {
                 if let Some(balances) = x {
                     if let Some(balance) = balances.get_mut(&delegator_stash) {
                         *balance += amount;
@@ -241,22 +243,18 @@ pub mod pallet {
             let delegator_stash = T::Lookup::lookup(delegator)?;
 
             // Making sure that the delegator exists
-            let controller = Bonded::<T>::get(&delegator_stash)
-                .ok_or(Error::<T>::NotStash)?
-                .0;
+            let controller = Bonded::<T>::get(&delegator_stash).ok_or(Error::<T>::NotStash)?;
             ensure!(
                 Ledger::<T>::contains_key(&controller),
                 Error::<T>::NotController
             );
 
             // Making sure the caller is OK
-            let controller = Bonded::<T>::get(&caller_stash)
-                .ok_or(Error::<T>::NotStash)?
-                .0;
+            let controller = Bonded::<T>::get(&caller_stash).ok_or(Error::<T>::NotStash)?;
             let mut ledger = Ledger::<T>::get(&controller).ok_or(Error::<T>::NotController)?;
 
             let mut delegator_balances =
-                Delegated::<T>::get(&controller).ok_or(Error::<T>::NotController)?;
+                Delegated::<T>::get(&caller_stash).ok_or(Error::<T>::NotStash)?;
 
             let balance = delegator_balances
                 .get_mut(&delegator_stash)
@@ -332,13 +330,8 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn bonded)]
-    pub type Bonded<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        (T::AccountId, RewardDestination<T::AccountId>),
-        OptionQuery,
-    >;
+    pub type Bonded<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, T::AccountId, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn ledger)]
@@ -359,6 +352,22 @@ pub mod pallet {
         BTreeMap<T::AccountId, BalanceOf<T>>,
         OptionQuery,
     >;
+
+    /// The current era index.
+    ///
+    /// This is the latest planned era, depending on how the Session pallet queues the validator
+    /// set, it might be active or not.
+    #[pallet::storage]
+    #[pallet::getter(fn current_era)]
+    pub type CurrentEra<T> = StorageValue<_, u32>;
+
+    /// The session index at which the era start for the last `HISTORY_DEPTH` eras.
+    ///
+    /// Note: This tracks the starting session (i.e. session index when era start being active)
+    /// for the eras in `[CurrentEra - HISTORY_DEPTH, CurrentEra]`.
+    #[pallet::storage]
+    #[pallet::getter(fn eras_start_session_index)]
+    pub type ErasStartSessionIndex<T> = StorageMap<_, Twox64Concat, u32, SessionIndex>;
 
     /// TODO!
     #[pallet::genesis_config]
@@ -397,4 +406,125 @@ impl<T: Config> Pallet<T> {
         );
         Ledger::<T>::insert(controller, ledger);
     }
+
+    /*     fn trigger_new_era(tart_session_index: SessionIndex) */
+
+    fn try_trigger_new_era(start_session_index: SessionIndex) -> Option<Vec<T::AccountId>> {
+        let era = CurrentEra::<T>::get();
+        if era == None {
+            CurrentEra::<T>::put(0);
+            ErasStartSessionIndex::<T>::insert(&0, &start_session_index);
+        }
+
+        return None;
+    }
+
+    fn new_session(session_index: SessionIndex) -> Option<Vec<T::AccountId>> {
+        let era = CurrentEra::<T>::get();
+        if era == None {
+            return Self::try_trigger_new_era(session_index);
+        } else {
+            let era = era.unwrap();
+            let current_era_start_session_index = ErasStartSessionIndex::<T>::get(era).unwrap();
+            let era_length = session_index
+                .checked_sub(current_era_start_session_index)
+                .unwrap();
+
+            if era_length < 10 {
+                return None;
+            }
+
+            let maybe_new_era_validators = Self::try_trigger_new_era(session_index);
+            maybe_new_era_validators
+        }
+    }
 }
+
+impl<T: Config> pallet_session::SessionManager<T::AccountId> for Pallet<T> {
+    fn new_session(new_index: SessionIndex) -> Option<Vec<T::AccountId>> {
+        /*         sp_runtime::print("New Session !!!!"); */
+
+        sp_std::if_std! {
+            println!("New Session");
+            let a = T::CharityDest::get();
+            println!("{:?}", a.encode());
+            println!("{}", a);
+        }
+
+        Self::new_session(new_index);
+
+        Some(vec![T::CharityDest::get()])
+    }
+
+    fn end_session(end_index: SessionIndex) {
+        sp_std::if_std! {
+            println!("End Session");
+        }
+    }
+
+    fn start_session(start_index: SessionIndex) {
+        sp_std::if_std! {
+            println!("Start Session");
+        }
+    }
+}
+
+/* impl<T: Config>
+    pallet_session::historical::SessionManager<T::AccountId, Exposure<T::AccountId, BalanceOf<T>>>
+    for Pallet<T>
+{
+    fn new_session(
+        new_index: SessionIndex,
+    ) -> Option<Vec<(T::AccountId, Exposure<T::AccountId, BalanceOf<T>>)>> {
+        todo!()
+    }
+
+    fn start_session(start_index: SessionIndex) {
+        todo!()
+    }
+
+    fn end_session(end_index: SessionIndex) {
+        todo!()
+    }
+}
+
+impl<T: Config>
+    pallet_session::historical::SessionManager<T::AccountId, pallet_cu>
+{
+    fn new_session(
+        new_index: SessionIndex,
+    ) -> Option<Vec<(T::AccountId, Exposure<T::AccountId, BalanceOf<T>>)>> {
+        todo!()
+    }
+
+    fn start_session(start_index: SessionIndex) {
+        todo!()
+    }
+
+    fn end_session(end_index: SessionIndex) {
+        todo!()
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Default, RuntimeDebug)]
+pub struct Exposure<AccountId, Balance: HasCompact> {
+    /// The total balance backing this validator.
+    #[codec(compact)]
+    pub total: Balance,
+    /// The validator's own stash that is exposed.
+    #[codec(compact)]
+    pub own: Balance,
+    /// The portions of nominators stashes that are exposed.
+    pub others: Vec<IndividualExposure<AccountId, Balance>>,
+}
+
+/// The amount of exposure (to slashing) than an individual nominator has.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug)]
+pub struct IndividualExposure<AccountId, Balance: HasCompact> {
+    /// The stash account of the nominator in question.
+    pub who: AccountId,
+    /// Amount of funds exposed.
+    #[codec(compact)]
+    pub value: Balance,
+}
+ */

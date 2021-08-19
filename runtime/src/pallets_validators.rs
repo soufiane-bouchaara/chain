@@ -7,7 +7,8 @@ use crate::{
     },
     pallets_core::{BlockHashCount, RuntimeBlockWeights},
     AuthorityDiscovery, Babe, Balances, Call, Event, Grandpa, Historical, ImOnline, Offences,
-    Runtime, Session, Signature, SignedPayload, Staking, System, Timestamp, UncheckedExtrinsic,
+    Runtime, Session, Signature, SignedPayload, Staking, System, TernoaStaking, Timestamp,
+    UncheckedExtrinsic,
 };
 use codec::Encode;
 use frame_support::{
@@ -111,7 +112,7 @@ impl pallet_session::Config for Runtime {
     type ValidatorIdOf = pallet_curveless_staking::StashOf<Self>;
     type ShouldEndSession = Babe;
     type NextSessionRotation = Babe;
-    type SessionManager = pallet_session::historical::NoteHistoricalRoot<Self, Staking>;
+    type SessionManager = TernoaStaking;
     type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
     type Keys = SessionKeys;
     type DisabledValidatorsThreshold = DisabledValidatorsThreshold;

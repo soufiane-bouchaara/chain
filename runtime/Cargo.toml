@@ -33,7 +33,7 @@ pallet-randomness-collective-flip = { git = "https://github.com/paritytech/subst
 pallet-scheduler = { git = "https://github.com/paritytech/substrate/", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/substrate/", features = ["historical"], default-features = false }
 #pallet-session-benchmarking = { git = "https://github.com/paritytech/substrate/",  default-features = false, optional = true }
-pallet-substratee-registry = { git = "https://github.com/scs/pallet-substratee-registry", default-features = false }
+pallet-teerex = { git = "https://github.com/integritee-network/pallet-teerex", default-features = false }
 pallet-sudo = { git = "https://github.com/paritytech/substrate/", default-features = false }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate/", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/paritytech/substrate/", default-features = false }
@@ -61,6 +61,7 @@ ternoa-marketplace = { default-features = false, path = "../pallets/marketplace"
 ternoa-nfts = { default-features = false, path = "../pallets/nfts" }
 ternoa-primitives = { default-features = false, path = "../primitives" }
 ternoa-timed-escrow = { default-features = false, path = "../pallets/timed-escrow" }
+ternoa-staking = { default-features = false, path = "../pallets/staking" }
 
 [build-dependencies]
 substrate-wasm-builder = { git = "https://github.com/paritytech/substrate/" }
@@ -88,7 +89,7 @@ std = [
 	"pallet-randomness-collective-flip/std",
 	"pallet-scheduler/std",
 	"pallet-session/std",
-	"pallet-substratee-registry/std",
+	"pallet-teerex/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
@@ -113,7 +114,9 @@ std = [
 	"ternoa-marketplace/std",
 	"ternoa-nfts/std",
 	"ternoa-primitives/std",
-	"ternoa-timed-escrow/std"
+	"ternoa-timed-escrow/std",
+	"ternoa-staking/std",
+	"hex-literal",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking",
@@ -138,4 +141,5 @@ runtime-benchmarks = [
 	"ternoa-nfts/runtime-benchmarks",
 	"ternoa-timed-escrow/runtime-benchmarks",
 	"ternoa-marketplace/runtime-benchmarks",
+	"ternoa-staking/runtime-benchmarks",
 ]

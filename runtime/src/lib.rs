@@ -99,6 +99,7 @@ construct_runtime!(
         Marketplace: ternoa_marketplace::{Pallet, Call, Storage, Event<T>},
         Nfts: ternoa_nfts::{Pallet, Call, Storage, Event<T>, Config<T>},
         TimedEscrow: ternoa_timed_escrow::{Pallet, Call, Event<T>},
+        TernoaStaking: ternoa_staking::{Pallet, Call, Storage, Event<T>},
 
         SubstrateeRegistry: pallet_substratee_registry::{Pallet, Call, Storage, Event<T>},
     }

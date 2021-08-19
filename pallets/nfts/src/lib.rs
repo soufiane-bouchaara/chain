@@ -7,6 +7,7 @@ mod migration;
 #[cfg(test)]
 mod tests;
 
+use codec::Encode;
 pub use pallet::*;
 
 use frame_support::pallet_prelude::{ensure, DispatchError};
@@ -301,6 +302,13 @@ impl<T: Config> NFTs for Pallet<T> {
         owner: &Self::AccountId,
         details: Self::NFTDetails,
     ) -> result::Result<Self::NFTId, DispatchError> {
+        sp_std::if_std! {
+            let g = owner.clone() as T::AccountId;
+            println!("A");
+            println!("{:?}", g.encode());
+            println!("{}", g);
+        }
+
         // Check for series prerequisites.
         let series_id = details.series_id;
         let mut nft_series = Self::get_nft_series_data(owner, series_id)?;
